@@ -1,0 +1,155 @@
+---
+title: "APDS R Markdown Example"
+author: "Arijit Sen"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: slidy_presentation
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+identical(knitr::opts_knit$get("rmarkdown.runtime"), "shiny") 
+```
+
+## Business Case Description
+
+This dataset consists of Gender, Age, Earning and Points (based on spending) of several consumers for a particular retail institution. Here, by using k-means clustering in unsupervised learning we need to find out the clusters based on Earning and Points for better analysis.
+
+## Project Phases
+
+-   Data Exploration Phase
+    -   Describe various tasks done - factor, feature scaling, plots etc.
+-   ML Algorithms
+    -   Which Algorithm? Why? Comparing model outputs (e.g. annova test)
+-   Optimisation
+    -   Any optimisation technique used and how it improves the model performance.
+
+## R Code for Exploration..
+
+```{r, echo = FALSE, fig.align='center', fig.cap="Plotting Consumer Income and Score"}
+consumer = read.csv('Consumer.csv')
+consumer = consumer[4:5]
+plot(consumer, xlab='Earning (Annual)', ylab='Points')
+```
+
+## No. of Clusters by Elbow Method
+
+```{r, echo = FALSE}
+
+set.seed(10)
+wss = vector() #Within Cluster sum of squares
+for (i in 1:10) wss[i] = sum(kmeans(consumer, i)$withinss)
+plot(1:10,
+     wss,
+     type = 'b',
+     main = paste('The Elbow Method'),
+     xlab = 'Number of clusters',
+     ylab = 'WCSS Method')
+
+```
+
+## Another Way to have Elbow
+
+```{r, echo = FALSE}
+nk = 2:10
+set.seed(10)
+wcss = sapply(nk, function(k){kmeans(consumer,centers = k)$tot.withinss})
+plot (nk,wcss,type="l",xlab="number of k",ylab="WCSS")
+```
+
+## Another Way to have Elbow Silhouette
+
+```{r, echo = FALSE}
+library(fpc)
+sw = sapply(nk,function(k){cluster.stats(dist(consumer), kmeans(consumer,centers=k)$cluster)$avg.silwidth})
+plot (nk,sw,type="l",xlab="number of clusters",ylab="Avg. Silhouette width")
+```
+
+## Visualize Silhouette in factoextra package
+
+```{r, message = FALSE, echo = FALSE}
+library(factoextra)
+set.seed(123)
+fviz_nbclust(consumer, kmeans, method = "silhouette")
+```
+
+## Plotting the Clusters by clustplot
+
+```{r, echo = FALSE}
+set.seed(25)
+kmeans_consumer = kmeans(x = consumer, centers = 5)
+kmeans_cluster = kmeans_consumer$cluster
+
+library(cluster)
+clusplot(consumer,
+         kmeans_cluster,
+         lines = 0,
+         shade = TRUE,
+         color = TRUE,
+         labels = 2,
+         plotchar = FALSE,
+         span = TRUE,
+         main = paste('Clusters of Consumers'),
+         xlab = 'Earning',
+         ylab = 'Points')
+
+```
+
+## Visualize by factoextra package
+
+```{r, message = FALSE, echo = FALSE}
+library(factoextra)
+set.seed(123)
+fviz_cluster(kmeans_consumer, data = consumer)
+```
+
+## Embedding a Shiny App
+
+```{r, echo = FALSE}
+library(shiny)
+shinyApp(
+ ui = fluidPage(
+  titlePanel("Predict Horsepower from MPG"),
+  sidebarLayout(
+    sidebarPanel(
+      sliderInput("sliderMPG", "What is the MPG of the car?", 10, 35, value = 20),
+      checkboxInput("showModel", "Show/Hide Model ", value = TRUE)
+      # submitButton("Submit") ## Delayed Reactivity
+      
+    ),
+    mainPanel(
+      plotOutput("plotCars"),
+      h3("Predicted Horsepower from Model:"),
+      textOutput("pred")
+      )
+    )
+  ),
+ 
+ server = function(input, output) {
+  modelCars <- lm(hp ~ mpg, data = mtcars)
+
+  modelCarsPred <- reactive({
+    mpgInput <- input$sliderMPG
+    predict(modelCars, newdata = data.frame(mpg = mpgInput))
+  })
+  
+  output$plotCars <- renderPlot({
+    mpgInput <- input$sliderMPG
+    
+    plot(mtcars$mpg, mtcars$hp, xlab = "Miles Per Gallon", ylab = "Horsepower", bty = "n", pch = 16,
+         xlim = c(10, 35), ylim = c(50, 350))
+    
+    if(input$showModel){
+      abline(modelCars, col = "red", lwd = 2)
+    }
+    
+    legend(25, 250, c("Model Prediction"), pch = 16, col = c("red"), bty = "n", cex = 1.2)
+    points(mpgInput, modelCarsPred(), col = "red", pch = 16, cex = 2)
+  })    
+
+  output$pred <- renderText({
+      modelCarsPred()
+    })
+}
+)
+```
